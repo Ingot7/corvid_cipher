@@ -131,7 +131,7 @@ class CorvidCipher {
         this.animationId = requestAnimationFrame(() => this.drawWaveform());
     }
 
-    translate() {
+    async translate() {
         const text = this.input.value.toUpperCase();
         if (!text.trim()) return;
 
@@ -159,8 +159,17 @@ class CorvidCipher {
         }
 
         this.outputSection.classList.add('active');
-        // Preload sounds
-        this.preloadSounds();
+
+        // Show loading message
+        this.playBtn.disabled = true;
+        this.playBtn.style.opacity = '0.5';
+
+        // Preload sounds and wait for completion
+        await this.preloadSounds();
+
+        // Re-enable play button
+        this.playBtn.disabled = false;
+        this.playBtn.style.opacity = '1';
     }
 
     async preloadSounds() {
@@ -168,15 +177,15 @@ class CorvidCipher {
 
         for (let id of uniqueIds) {
             if (!this.audioBuffers[id]) {
-                // Use HTML5 Audio instead of Web Audio API to avoid CORS issues with file://
-                const audio = new Audio(`https://xeno-canto.org/${id}/download`);
-                audio.preload = 'auto';
-                this.audioBuffers[id] = audio;
-
-                // Optional: Check if it loads
-                audio.addEventListener('error', (e) => {
+                try {
+                    // Fetch audio as blob for better mobile compatibility
+                    const response = await fetch(`https://xeno-canto.org/${id}/download`);
+                    const blob = await response.blob();
+                    const blobUrl = URL.createObjectURL(blob);
+                    this.audioBuffers[id] = blobUrl;
+                } catch (e) {
                     console.error(`Failed to load sound ${id}`, e);
-                });
+                }
             }
         }
     }
@@ -218,11 +227,9 @@ class CorvidCipher {
 
                 // Play sound
                 if (this.audioBuffers[item.id]) {
-                    const audio = this.audioBuffers[item.id];
+                    // Use preloaded blob URL (better for mobile)
+                    const audio = new Audio(this.audioBuffers[item.id]);
                     this.currentAudio = audio;
-
-                    // Play full original sound
-                    audio.currentTime = 0;
 
                     let played = false;
                     try {
