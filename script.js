@@ -20,12 +20,12 @@ const CIPHER_MAP = {
 
     // Consonants - Jackdaw
     'H': { species: 'Western Jackdaw', type: 'Call', id: '1025925' },
-    'J': { species: 'Western Jackdaw', type: 'Call', id: '1025920' },
+    'J': { species: 'Western Jackdaw', type: 'Call', id: '1025923' },
     'K': { species: 'Western Jackdaw', type: 'Call', id: '1024252' },
     'L': { species: 'Western Jackdaw', type: 'Call', id: '1024251' },
 
     // Consonants - Magpie
-    'M': { species: 'Eurasian Magpie', type: 'Call', id: '1025967' },
+    'M': { species: 'Eurasian Magpie', type: 'Call', id: '1023191' },
     'N': { species: 'Eurasian Magpie', type: 'Call', id: '1023192' },
     'P': { species: 'Eurasian Magpie', type: 'Call', id: '1017982' },
     'Q': { species: 'Eurasian Magpie', type: 'Call', id: '1017981' },
