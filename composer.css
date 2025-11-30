@@ -134,12 +134,149 @@
     text-decoration: underline;
 }
 
+/* Live Performance Section */
+.live-performance-section {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1.5rem;
+    border-radius: 15px;
+    backdrop-filter: blur(5px);
+    margin-bottom: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.performance-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.live-performance-section h2 {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: var(--accent-color);
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.live-performance-section h3 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: var(--text-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 0.5rem;
+}
+
+/* Drum Controls */
+.drum-machine-controls {
+    flex: 1;
+    min-width: 250px;
+    margin-bottom: 0;
+}
+
+.keyboard-visualizer {
+    flex: 2;
+    min-width: 300px;
+}
+
+.control-group {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.slider-control {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-family: 'Special Elite', cursive;
+}
+
+.slider-control input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 120px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    outline: none;
+}
+
+.slider-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+
+.slider-control input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* Keyboard Visualizer */
+.instruction-text {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 1rem;
+    font-style: italic;
+}
+
+.keys-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.key {
+    width: 45px;
+    height: 45px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    user-select: none;
+}
+
+.key:hover {
+    border-color: var(--accent-color);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.key.active {
+    background: var(--accent-color);
+    color: var(--bg-color);
+    transform: translateY(2px);
+    box-shadow: 0 0 15px var(--accent-color);
+}
+
+.key-char {
+    font-size: 1.1rem;
+    font-weight: bold;
+    font-family: 'Special Elite', cursive;
+}
+
+.key-label {
+    font-size: 0.55rem;
+    opacity: 0.8;
+    margin-top: 2px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .sequencer-grid {
         grid-template-columns: auto repeat(8, 1fr);
-        /* Show 8 steps on mobile? Or scroll */
-        /* Actually, let's keep 16 but make them smaller or scrollable */
         display: flex;
         flex-direction: column;
     }

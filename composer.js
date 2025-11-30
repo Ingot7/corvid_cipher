@@ -20,6 +20,23 @@ const SOUND_BANK = [
     { id: '1056303', name: 'Jay Call (Perc)', type: 'treble' }
 ];
 
+// Keyboard Mappings
+const KEY_MAP = {
+    'q': 0, 'w': 1, 'e': 2, 'r': 3, 't': 4, 'y': 5, 'u': 6, 'i': 7
+};
+
+// Pitch Scale (C Major-ish relative steps)
+const NOTE_MAP = {
+    'a': 1.0,       // C
+    's': 1.122,     // D
+    'd': 1.26,      // E
+    'f': 1.335,     // F
+    'g': 1.498,     // G
+    'h': 1.682,     // A
+    'j': 1.888,     // B
+    'k': 2.0        // C (Octave)
+};
+
 class CorvidComposer {
     constructor() {
         this.grid = document.getElementById('sequencerGrid');
@@ -30,12 +47,25 @@ class CorvidComposer {
         this.presetSelect = document.getElementById('presetSelect');
         this.statusText = document.getElementById('statusText');
 
+        // New UI Elements
+        this.drumPlayBtn = document.getElementById('drumPlayBtn');
+        this.drumVolumeSlider = document.getElementById('drumVolume');
+        this.keysContainer = document.getElementById('keysContainer');
+
         this.steps = 16;
         this.bpm = 120;
         this.isPlaying = false;
         this.currentStep = 0;
         this.intervalId = null;
         this.audioBuffers = {}; // Cache
+        this.activeSources = []; // Track playing audio nodes
+
+        // Drum Machine State
+        this.isDrumsPlaying = false;
+        this.drumIntervalId = null;
+        this.drumStep = 0;
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.drumVolume = 0.5;
 
         // State: 2D array [trackIndex][stepIndex] = boolean
         this.pattern = Array(SOUND_BANK.length).fill().map(() => Array(this.steps).fill(false));
@@ -45,6 +75,7 @@ class CorvidComposer {
 
     init() {
         this.renderGrid();
+        this.initKeyboard();
         this.setupEventListeners();
         this.preloadSounds();
     }
@@ -59,33 +90,104 @@ class CorvidComposer {
                 this.stop();
                 this.play(); // Restart with new BPM
             }
+            if (this.isDrumsPlaying) {
+                this.stopDrums();
+                this.playDrums();
+            }
         });
         this.presetSelect.addEventListener('change', (e) => this.loadPreset(e.target.value));
+
+        // Drum Controls
+        this.drumPlayBtn.addEventListener('click', () => {
+            if (this.isDrumsPlaying) this.stopDrums();
+            else this.playDrums();
+        });
+        this.drumVolumeSlider.addEventListener('input', (e) => {
+            this.drumVolume = parseFloat(e.target.value);
+        });
+
+        // Keyboard Events
+        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+        document.addEventListener('keyup', (e) => this.handleKeyUp(e));
+    }
+
+    initKeyboard() {
+        this.keysContainer.innerHTML = '';
+
+        // Row 1: Sound Triggers
+        Object.keys(KEY_MAP).forEach(key => {
+            const trackIdx = KEY_MAP[key];
+            if (trackIdx < SOUND_BANK.length) {
+                this.createKey(key, SOUND_BANK[trackIdx].name);
+            }
+        });
+
+        // Row 2: Pitch Triggers (using Raven as default instrument)
+        Object.keys(NOTE_MAP).forEach(key => {
+            this.createKey(key, `Pitch x${NOTE_MAP[key].toFixed(1)}`);
+        });
+    }
+
+    createKey(char, label) {
+        const keyEl = document.createElement('div');
+        keyEl.className = 'key';
+        keyEl.dataset.key = char;
+        keyEl.innerHTML = `
+            <span class="key-char">${char.toUpperCase()}</span>
+            <span class="key-label">${label}</span>
+        `;
+        keyEl.addEventListener('mousedown', () => this.triggerKey(char));
+        this.keysContainer.appendChild(keyEl);
+    }
+
+    handleKeyDown(e) {
+        if (e.repeat) return;
+        const key = e.key.toLowerCase();
+        this.triggerKey(key);
+    }
+
+    handleKeyUp(e) {
+        const key = e.key.toLowerCase();
+        const el = document.querySelector(`.key[data-key="${key}"]`);
+        if (el) el.classList.remove('active');
+    }
+
+    triggerKey(key) {
+        const el = document.querySelector(`.key[data-key="${key}"]`);
+        if (el) {
+            el.classList.add('active');
+            setTimeout(() => el.classList.remove('active'), 200); // Visual fallback
+        }
+
+        if (KEY_MAP.hasOwnProperty(key)) {
+            // Play specific sound
+            const trackIdx = KEY_MAP[key];
+            if (trackIdx < SOUND_BANK.length) {
+                this.playSound(SOUND_BANK[trackIdx].id);
+            }
+        } else if (NOTE_MAP.hasOwnProperty(key)) {
+            // Play pitched sound (using Raven Call as default melodic voice)
+            // ID: 1027362 (Raven Call)
+            this.playSound('1027362', NOTE_MAP[key]);
+        }
     }
 
     renderGrid() {
         this.grid.innerHTML = '';
-
-        // CSS Grid Layout needs to be defined dynamically if we want labels + steps
         this.grid.style.gridTemplateColumns = `150px repeat(${this.steps}, 1fr)`;
 
         SOUND_BANK.forEach((sound, trackIndex) => {
-            // Label
             const label = document.createElement('div');
             label.className = 'track-label';
             label.textContent = sound.name;
             this.grid.appendChild(label);
 
-            // Steps
             for (let i = 0; i < this.steps; i++) {
                 const btn = document.createElement('div');
                 btn.className = 'step-btn';
                 btn.dataset.track = trackIndex;
                 btn.dataset.step = i;
-
-                // Beat markers styling (every 4th beat)
                 if (i % 4 === 0) btn.style.borderLeft = '1px solid rgba(255,255,255,0.3)';
-
                 btn.addEventListener('click', () => this.toggleStep(trackIndex, i, btn));
                 this.grid.appendChild(btn);
             }
@@ -95,8 +197,6 @@ class CorvidComposer {
     toggleStep(track, step, element) {
         this.pattern[track][step] = !this.pattern[track][step];
         element.classList.toggle('active');
-
-        // Preview sound if turning on
         if (this.pattern[track][step]) {
             this.playSound(SOUND_BANK[track].id);
         }
@@ -111,53 +211,57 @@ class CorvidComposer {
             audio.addEventListener('canplaythrough', () => {
                 loaded++;
                 if (loaded === SOUND_BANK.length) {
-                    this.statusText.textContent = "Ready to compose.";
+                    this.statusText.textContent = "Interactive Ready.";
                 }
             });
             this.audioBuffers[sound.id] = audio;
         });
     }
 
-    playSound(id) {
-        const audio = this.audioBuffers[id];
-        if (audio) {
-            audio.currentTime = 0;
-            audio.play().catch(e => console.error("Play error", e));
+    playSound(id, rate = 1.0) {
+        const buffer = this.audioBuffers[id];
+        if (buffer) {
+            // Clone node to allow overlapping sounds
+            const clone = buffer.cloneNode();
+            clone.playbackRate = rate;
+
+            // Track active source
+            this.activeSources.push(clone);
+
+            // Remove from tracking when done
+            clone.addEventListener('ended', () => {
+                const index = this.activeSources.indexOf(clone);
+                if (index > -1) {
+                    this.activeSources.splice(index, 1);
+                }
+            });
+
+            clone.play().catch(e => console.error("Play error", e));
         }
     }
+
+    // --- Sequencer Logic ---
 
     play() {
         if (this.isPlaying) return;
         this.isPlaying = true;
         this.currentStep = 0;
-
-        const interval = (60 / this.bpm) * 1000 / 4; // 16th notes
-
-        this.playStep(); // Play first immediately
+        const interval = (60 / this.bpm) * 1000 / 4;
+        this.playStep();
         this.intervalId = setInterval(() => {
             this.currentStep = (this.currentStep + 1) % this.steps;
             this.playStep();
         }, interval);
-
-        this.statusText.textContent = "Playing...";
+        this.statusText.textContent = "Playing Sequence...";
     }
 
     playStep() {
-        // Visual feedback
         const allSteps = document.querySelectorAll('.step-btn');
         allSteps.forEach(el => el.classList.remove('playing'));
 
-        // Highlight current column
         SOUND_BANK.forEach((_, trackIndex) => {
-            // Calculate index in the flat grid list (Label + 16 steps per row)
-            // Grid child index is 1-based. 
-            // Row starts at: trackIndex * (17) 
-            // Step is at: + 1 (label) + stepIndex + 1
-            // Easier to select by dataset
             const stepEl = document.querySelector(`.step-btn[data-track="${trackIndex}"][data-step="${this.currentStep}"]`);
             if (stepEl) stepEl.classList.add('playing');
-
-            // Play sound if active
             if (this.pattern[trackIndex][this.currentStep]) {
                 this.playSound(SOUND_BANK[trackIndex].id);
             }
@@ -170,6 +274,18 @@ class CorvidComposer {
         this.currentStep = 0;
         document.querySelectorAll('.step-btn').forEach(el => el.classList.remove('playing'));
         this.statusText.textContent = "Stopped.";
+
+        // Drums are now independent - do not stop them here
+        // if (this.isDrumsPlaying) {
+        //     this.stopDrums();
+        // }
+
+        // Stop all active bird sounds (clones)
+        this.activeSources.forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+        });
+        this.activeSources = []; // Clear the list
     }
 
     clearPattern() {
@@ -181,21 +297,13 @@ class CorvidComposer {
     loadPreset(type) {
         this.clearPattern();
         if (!type) return;
-
-        // Simple presets
         if (type === 'basic') {
-            // Kick (Raven Alarm) on 0, 4, 8, 12
             this.setStep(1, 0); this.setStep(1, 4); this.setStep(1, 8); this.setStep(1, 12);
-            // Snare (Magpie) on 4, 12
             this.setStep(6, 4); this.setStep(6, 12);
-            // Hi-Hat (Jackdaw) every 2
             for (let i = 0; i < 16; i += 2) this.setStep(5, i);
         } else if (type === 'syncopated') {
-            // Kick
             this.setStep(1, 0); this.setStep(1, 3); this.setStep(1, 8); this.setStep(1, 11);
-            // Snare
             this.setStep(6, 4); this.setStep(6, 12);
-            // Crow
             this.setStep(3, 14);
         } else if (type === 'chaos') {
             for (let i = 0; i < 10; i++) {
@@ -212,6 +320,115 @@ class CorvidComposer {
             const el = document.querySelector(`.step-btn[data-track="${track}"][data-step="${step}"]`);
             if (el) el.classList.add('active');
         }
+    }
+
+    // --- Drum Machine Logic (Web Audio API) ---
+
+    playDrums() {
+        if (this.isDrumsPlaying) return;
+        this.isDrumsPlaying = true;
+        this.drumPlayBtn.textContent = "Stop Drums";
+        this.drumPlayBtn.style.background = "var(--accent-color)";
+        this.drumPlayBtn.style.color = "var(--bg-color)";
+
+        // Resume context if suspended (browser policy)
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+        }
+
+        this.drumStep = 0;
+        const interval = (60 / this.bpm) * 1000 / 4;
+
+        this.playDrumStep();
+        this.drumIntervalId = setInterval(() => {
+            this.drumStep = (this.drumStep + 1) % 16;
+            this.playDrumStep();
+        }, interval);
+    }
+
+    stopDrums() {
+        this.isDrumsPlaying = false;
+        clearInterval(this.drumIntervalId);
+        this.drumPlayBtn.textContent = "Start Drums";
+        this.drumPlayBtn.style.background = "";
+        this.drumPlayBtn.style.color = "";
+    }
+
+    playDrumStep() {
+        const time = this.audioContext.currentTime;
+
+        // Basic Rock Beat
+        // Kick: 0, 4, 8, 12 (and syncopation on 10)
+        if (this.drumStep % 4 === 0 || this.drumStep === 10) {
+            this.triggerDrum('kick', time);
+        }
+
+        // Snare: 4, 12
+        if (this.drumStep === 4 || this.drumStep === 12) {
+            this.triggerDrum('snare', time);
+        }
+
+        // Hi-hat: Every 2 steps (8th notes)
+        if (this.drumStep % 2 === 0) {
+            this.triggerDrum('hihat', time);
+        }
+    }
+
+    triggerDrum(type, time) {
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
+
+        osc.connect(gain);
+        gain.connect(this.audioContext.destination);
+
+        const vol = this.drumVolume;
+
+        if (type === 'kick') {
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
+            gain.gain.setValueAtTime(vol, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.5);
+            osc.start(time);
+            osc.stop(time + 0.5);
+        } else if (type === 'snare') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(100, time);
+            gain.gain.setValueAtTime(vol * 0.8, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+            osc.start(time);
+            osc.stop(time + 0.2);
+
+            // Add noise for snare snap
+            this.createNoise(time, 0.2, vol * 0.5);
+        } else if (type === 'hihat') {
+            // High frequency noise/tone
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(800, time);
+            // Very short decay
+            gain.gain.setValueAtTime(vol * 0.3, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+            osc.start(time);
+            osc.stop(time + 0.05);
+        }
+    }
+
+    createNoise(time, duration, vol) {
+        const bufferSize = this.audioContext.sampleRate * duration;
+        const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.audioContext.createBufferSource();
+        noise.buffer = buffer;
+        const gain = this.audioContext.createGain();
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+
+        noise.connect(gain);
+        gain.connect(this.audioContext.destination);
+        noise.start(time);
     }
 }
 
